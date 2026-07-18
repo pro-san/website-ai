@@ -1,0 +1,6 @@
+{
+  "name": "PRO DIGITAL™ AI Marketplace",
+  "description": "A high-performance full-stack AI SaaS Marketplace platform allowing users to discover, subscribe, purchase and use AI-powered writing, chatting, image generation, speech synthesis, and video compilation tools.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
