@@ -57,6 +57,16 @@ export default function App() {
     setToast({ title, message, visible: true, type });
   };
 
+  // Global Referral Link Detector
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref');
+    if (ref) {
+      localStorage.setItem('referralCode', ref);
+      sessionStorage.setItem('referralCode', ref);
+    }
+  }, []);
+
   // 1. Initial Session Hydration & Sync
   useEffect(() => {
     const fetchSessionAndData = async () => {

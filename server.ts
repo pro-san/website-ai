@@ -232,7 +232,7 @@ function authenticateToken(req: any, res: any, next: any) {
 
 // Authentication & Profile
 app.post('/api/auth/register', (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role, referralCode } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'All fields (name, email, password) are required.' });
   }
@@ -242,6 +242,16 @@ app.post('/api/auth/register', (req, res) => {
     return res.status(400).json({ error: 'Email address already registered.' });
   }
 
+  // Check if there is a valid referrer
+  let referrer: User | undefined;
+  const referrerId = referralCode || req.body.ref;
+  if (referrerId) {
+    referrer = db.getUsers().find(u => u.id === referrerId || u.email === referrerId);
+  }
+
+  const hasReferral = !!referrer;
+  const startingCredits = hasReferral ? 650 : 500;
+
   const newUser: User = {
     id: 'usr-' + generateId(),
     name,
@@ -249,7 +259,7 @@ app.post('/api/auth/register', (req, res) => {
     avatar: `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 1000000)}?w=150`,
     role: role || 'user',
     status: 'active',
-    credits: 500, // 500 free sign-up credits
+    credits: startingCredits,
     subscriptionPlan: 'free',
     createdAt: new Date().toISOString()
   };
@@ -260,11 +270,33 @@ app.post('/api/auth/register', (req, res) => {
   db.addTransaction({
     id: 'tx-' + generateId(),
     userId: newUser.id,
-    amount: 500,
+    amount: startingCredits,
     type: 'bonus',
-    description: 'Welcome bonus credit allocation',
+    description: hasReferral ? 'Welcome bonus credit allocation (Referral Promo)' : 'Welcome bonus credit allocation',
     timestamp: new Date().toISOString()
   });
+
+  // Reward the referrer if applicable
+  if (referrer) {
+    const referralBonus = 350;
+    db.updateUser(referrer.id, { credits: (referrer.credits || 0) + referralBonus });
+
+    db.addTransaction({
+      id: 'tx-' + generateId(),
+      userId: referrer.id,
+      amount: referralBonus,
+      type: 'bonus',
+      description: `Referral bonus for inviting ${name}`,
+      timestamp: new Date().toISOString()
+    });
+
+    const refAlertMsg = db.addNotification(
+      referrer.id,
+      'Referral Reward Received! 🎁',
+      `Congratulations! Your friend ${name} registered using your referral link. You have been rewarded ${referralBonus} bonus credits.`
+    );
+    sendToUser(referrer.id, 'notification', refAlertMsg);
+  }
 
   res.status(201).json({ user: newUser, token: newUser.id });
 });

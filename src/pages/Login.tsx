@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Sparkles, MessageSquare, Shield, HelpCircle, ArrowRight, RefreshCw, AlertCircle, Key, Mail, User as UserIcon } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Sparkles, MessageSquare, Shield, HelpCircle, ArrowRight, RefreshCw, AlertCircle, Key, Mail, Gift, User as UserIcon } from 'lucide-react';
 import { User } from '../types';
 
 interface LoginProps {
@@ -11,12 +11,30 @@ export default function Login({ onAuthSuccess, onBackToHome }: LoginProps) {
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [refCode, setRefCode] = useState<string | null>(null);
 
   // Fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState<'user' | 'creator'>('user');
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlRef = urlParams.get('ref');
+    if (urlRef) {
+      localStorage.setItem('referralCode', urlRef);
+      sessionStorage.setItem('referralCode', urlRef);
+      setRefCode(urlRef);
+      // Auto-switch to register mode to make sign up convenient
+      setIsRegisterMode(true);
+    } else {
+      const stored = localStorage.getItem('referralCode') || sessionStorage.getItem('referralCode');
+      if (stored) {
+        setRefCode(stored);
+      }
+    }
+  }, []);
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +48,7 @@ export default function Login({ onAuthSuccess, onBackToHome }: LoginProps) {
     setLoading(true);
     const endpoint = isRegisterMode ? '/api/auth/register' : '/api/auth/login';
     const payload = isRegisterMode 
-      ? { name, email, password, role }
+      ? { name, email, password, role, referralCode: refCode }
       : { email, password };
 
     try {
@@ -42,6 +60,11 @@ export default function Login({ onAuthSuccess, onBackToHome }: LoginProps) {
 
       if (res.ok) {
         const data = await res.json();
+        if (isRegisterMode) {
+          // Clear used referral code
+          localStorage.removeItem('referralCode');
+          sessionStorage.removeItem('referralCode');
+        }
         onAuthSuccess(data.user, data.token);
       } else {
         const errData = await res.json();
@@ -118,6 +141,19 @@ export default function Login({ onAuthSuccess, onBackToHome }: LoginProps) {
           <div className="flex items-center gap-2.5 rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-xs text-rose-400">
             <AlertCircle className="h-4.5 w-4.5 shrink-0" />
             <p>{error}</p>
+          </div>
+        )}
+
+        {/* Referral Promo Notice */}
+        {isRegisterMode && refCode && (
+          <div className="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs text-emerald-400 animate-pulse">
+            <Gift className="h-5 w-5 shrink-0 text-emerald-400 animate-bounce" />
+            <div>
+              <p className="font-extrabold text-emerald-300 text-xs">Referral Promotion Active! 🎁</p>
+              <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
+                You were invited by a friend. Sign up now and you'll receive <span className="text-emerald-400 font-extrabold">150 extra starting credits</span> (650 total) for free!
+              </p>
+            </div>
           </div>
         )}
 

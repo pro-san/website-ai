@@ -3,7 +3,7 @@ import {
   Wallet, Key, Calendar, ArrowUpRight, BarChart3, Clock, 
   CreditCard, Sparkles, Check, ChevronRight, Copy, RefreshCw, 
   TrendingUp, CircleDollarSign, Plus, Coins, Terminal, Download,
-  Trophy, Target, Award
+  Trophy, Target, Award, Gift
 } from 'lucide-react';
 import { User, CreditTransaction, UsageLog } from '../types';
 import {
@@ -53,6 +53,7 @@ export default function Dashboard({ user, token, onRefreshUser }: DashboardProps
   const [transactions, setTransactions] = useState<CreditTransaction[]>([]);
   const [usageLogs, setUsageLogs] = useState<UsageLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copiedReferral, setCopiedReferral] = useState(false);
 
   // Top-up wallet form state
   const [topupAmount, setTopupAmount] = useState<number>(2000);
@@ -238,6 +239,14 @@ export default function Dashboard({ user, token, onRefreshUser }: DashboardProps
   const copyKeyToClipboard = () => {
     navigator.clipboard.writeText(apiKey);
     alert('API Key copied to clipboard!');
+  };
+
+  const handleCopyReferral = () => {
+    if (!user) return;
+    const referralUrl = `${window.location.origin}/?ref=${user.id}`;
+    navigator.clipboard.writeText(referralUrl);
+    setCopiedReferral(true);
+    setTimeout(() => setCopiedReferral(false), 2500);
   };
 
   const getChartData = () => {
@@ -827,6 +836,90 @@ export default function Dashboard({ user, token, onRefreshUser }: DashboardProps
                   </button>
                 </div>
               </form>
+            </div>
+
+            {/* Refer a Friend & Get Rewards Card */}
+            <div className="rounded-2xl border border-slate-900 bg-slate-950 p-6 sm:p-8 space-y-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-900 pb-4">
+                <div>
+                  <h3 className="text-sm font-black text-slate-100 flex items-center gap-2">
+                    <Gift className="h-4 w-4 text-emerald-400 animate-pulse" />
+                    Refer a Friend & Earn 350 Credits
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Share the power of PRO DIGITAL™ with friends. They receive 150 extra startup credits, and you earn 350 credits.
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-3 py-1 text-[10px] font-extrabold text-emerald-400 font-mono uppercase">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  Unlimited Rewards Active
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Stats / How It Works */}
+                <div className="md:col-span-1 space-y-4 border-r border-slate-900 pr-0 md:pr-6">
+                  <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">How it works</span>
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-2.5">
+                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-slate-400 border border-slate-800">1</div>
+                      <p className="text-[10px] text-slate-400 leading-relaxed">
+                        Copy your personalized referral link below and send it to friends.
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-slate-400 border border-slate-800">2</div>
+                      <p className="text-[10px] text-slate-400 leading-relaxed">
+                        Your friend registers an account using your referral link.
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">3</div>
+                      <p className="text-[10px] text-slate-400 leading-relaxed">
+                        They start with <span className="text-emerald-400 font-bold">650 credits</span> instead of 500, and <span className="text-indigo-400 font-bold">350 bonus credits</span> instantly credit your wallet!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Main Action Area */}
+                <div className="md:col-span-2 space-y-4 bg-slate-900/10 rounded-xl p-5 border border-slate-900/60 flex flex-col justify-between">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Your Unique Referral Link</label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={user ? `${window.location.origin}/?ref=${user.id}` : 'Login to generate link'}
+                        className="flex-1 rounded-xl border border-slate-800 bg-slate-950 px-3.5 py-2.5 text-xs text-slate-300 font-mono select-all focus:outline-none focus:border-indigo-500 min-w-0"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCopyReferral}
+                        className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold px-5 py-2.5 text-xs transition flex items-center justify-center gap-1.5 shrink-0"
+                      >
+                        {copiedReferral ? (
+                          <>
+                            <Check className="h-4 w-4" />
+                            Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-4 w-4" />
+                            Copy Link
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-900 pt-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <p className="text-[10px] text-slate-500">
+                      We also support email-based referrals. Your friend can also type your registered email address <code className="text-indigo-400 font-mono font-bold bg-indigo-500/5 px-1.5 py-0.5 rounded">{user?.email}</code> as the referral code on registration.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Promo / Voucher Code Activation Card */}
