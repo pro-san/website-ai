@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, MessageSquare, Bell, Wallet, User as UserIcon, LogOut, ShieldAlert, Hammer, Globe } from 'lucide-react';
+import { Sparkles, MessageSquare, Bell, Wallet, User as UserIcon, LogOut, ShieldAlert, Hammer, Globe, Sun, Moon } from 'lucide-react';
 import { User, Notification } from '../types';
 
 interface NavbarProps {
@@ -9,6 +9,8 @@ interface NavbarProps {
   setActiveTab: (tab: any) => void;
   onLogout: () => void;
   onOpenNotifications: () => void;
+  theme: 'dark' | 'light';
+  onToggleTheme: () => void;
 }
 
 export default function Navbar({
@@ -17,7 +19,9 @@ export default function Navbar({
   activeTab,
   setActiveTab,
   onLogout,
-  onOpenNotifications
+  onOpenNotifications,
+  theme,
+  onToggleTheme
 }: NavbarProps) {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const unreadCount = notifications.filter(n => n.readStatus === 'unread').length;
@@ -83,6 +87,20 @@ export default function Navbar({
 
           {/* Controls */}
           <div className="flex items-center gap-4">
+            {/* Theme Switcher Toggle */}
+            <button
+              id="navbar-theme-toggle"
+              onClick={onToggleTheme}
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-900 hover:text-white transition"
+              title={theme === 'dark' ? 'Switch to High-Contrast Light Mode' : 'Switch to Dark Mode'}
+            >
+              {theme === 'dark' ? (
+                <Sun className="h-4.5 w-4.5 text-amber-400" />
+              ) : (
+                <Moon className="h-4.5 w-4.5 text-indigo-600" />
+              )}
+            </button>
+
             {user ? (
               <>
                 {/* Credit Wallet Ticker */}

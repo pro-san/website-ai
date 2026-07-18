@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Sparkles, FileText, Send, Image as ImageIcon, Video, Mic, 
   Copy, Download, Play, RefreshCw, SendHorizontal, Trash2, 
-  Sliders, Volume2, User as UserIcon, CheckCircle2, AlertCircle, HelpCircle
+  Sliders, Volume2, User as UserIcon, CheckCircle2, AlertCircle, HelpCircle,
+  Terminal, Code, Eye, EyeOff, Lock, Check
 } from 'lucide-react';
 import { AITool, User } from '../types';
 
@@ -14,6 +15,7 @@ interface WorkspaceProps {
   onRefreshUser: () => void;
   setActiveTab: (tab: any) => void;
   setActiveTool: (tool: AITool | null) => void;
+  purchasedToolIds: string[];
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
@@ -25,7 +27,8 @@ export default function Workspace({
   token,
   onRefreshUser,
   setActiveTab,
-  setActiveTool
+  setActiveTool,
+  purchasedToolIds
 }: WorkspaceProps) {
   // If no active tool is selected, default to the first approved tool or let user pick.
   const approvedTools = tools.filter(t => t.status === 'approved');
@@ -75,6 +78,174 @@ export default function Workspace({
   const [speechSpeed, setSpeechSpeed] = useState(1);
   const [generatedAudioBase64, setGeneratedAudioBase64] = useState('');
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+
+  // ==========================================
+  // PLAYGROUND STATES & LOGIC
+  // ==========================================
+  const [workspaceSubTab, setWorkspaceSubTab] = useState<'interface' | 'playground'>('interface');
+  const [playgroundToolId, setPlaygroundToolId] = useState<string>('');
+  const [playgroundPrompt, setPlaygroundPrompt] = useState<string>('');
+  const [playgroundAspectRatio, setPlaygroundAspectRatio] = useState<string>('16:9');
+  const [playgroundVoiceName, setPlaygroundVoiceName] = useState<string>('Zephyr');
+  const [playgroundJson, setPlaygroundJson] = useState<string>('{}');
+  const [jsonError, setJsonError] = useState<string>('');
+  const [playgroundLoading, setPlaygroundLoading] = useState<boolean>(false);
+  const [playgroundResponse, setPlaygroundResponse] = useState<any>(null);
+  const [playgroundResponseStatus, setPlaygroundResponseStatus] = useState<string>('');
+  const [playgroundResponseTime, setPlaygroundResponseTime] = useState<number | null>(null);
+  const [showPlaygroundToken, setShowPlaygroundToken] = useState<boolean>(false);
+  const [copiedToken, setCopiedToken] = useState<boolean>(false);
+  const [copiedResponse, setCopiedResponse] = useState<boolean>(false);
+
+  // Filter approved tools that are free OR purchased
+  const playgroundSubscribedTools = tools.filter(t => 
+    t.status === 'approved' && 
+    (t.type === 'free' || purchasedToolIds.includes(t.id))
+  );
+
+  // Default selected tool inside Playground should be the active sidebar tool if subscribed
+  useEffect(() => {
+    if (workspaceSubTab === 'playground' && !playgroundToolId) {
+      const activeIsSubscribed = playgroundSubscribedTools.some(t => t.id === currentTool.id);
+      if (activeIsSubscribed) {
+        setPlaygroundToolId(currentTool.id);
+      } else if (playgroundSubscribedTools.length > 0) {
+        setPlaygroundToolId(playgroundSubscribedTools[0].id);
+      }
+    }
+  }, [workspaceSubTab, currentTool, playgroundSubscribedTools]);
+
+  const selectedPlaygroundTool = tools.find(t => t.id === playgroundToolId) || null;
+
+  const getPlaygroundEndpoint = (tool: AITool | null) => {
+    if (!tool) return '/api/ai/chat';
+    const cat = tool.category.toLowerCase();
+    if (cat.includes('chat')) return '/api/ai/chat';
+    if (cat.includes('writing') || cat.includes('writer')) return '/api/ai/writer';
+    if (cat.includes('image') || cat.includes('art')) return '/api/ai/image';
+    if (cat.includes('video') || cat.includes('clip')) return '/api/ai/video';
+    if (cat.includes('voice') || cat.includes('speech')) return '/api/ai/voice';
+    return '/api/ai/chat';
+  };
+
+  const playgroundEndpoint = getPlaygroundEndpoint(selectedPlaygroundTool);
+
+  // Re-generate default values on tool change
+  useEffect(() => {
+    if (!selectedPlaygroundTool) return;
+    const cat = selectedPlaygroundTool.category.toLowerCase();
+    
+    if (cat.includes('chat')) {
+      setPlaygroundPrompt('Hello! Summarize three major applications of AI in SaaS operations.');
+    } else if (cat.includes('writing') || cat.includes('writer')) {
+      setPlaygroundPrompt('Write a catchy email landing copy promoting our ProDigital Workspace developer platform.');
+    } else if (cat.includes('image') || cat.includes('art')) {
+      setPlaygroundPrompt('Modern glass office building with sunset lighting, cinematic, high resolution');
+      setPlaygroundAspectRatio('16:9');
+    } else if (cat.includes('video') || cat.includes('clip')) {
+      setPlaygroundPrompt('A cinematic drone shot of automated server containers with green flashing status lights.');
+    } else if (cat.includes('voice') || cat.includes('speech')) {
+      setPlaygroundPrompt('Welcome to the developer playground. This is a synthetic audio stream test.');
+      setPlaygroundVoiceName('Zephyr');
+    }
+  }, [playgroundToolId]);
+
+  // Sync interactive parameters to Raw JSON payload
+  useEffect(() => {
+    if (!selectedPlaygroundTool) return;
+    const cat = selectedPlaygroundTool.category.toLowerCase();
+    let body: any = {};
+
+    if (cat.includes('chat')) {
+      body = {
+        message: playgroundPrompt,
+        toolId: selectedPlaygroundTool.id
+      };
+    } else if (cat.includes('writing') || cat.includes('writer')) {
+      body = {
+        prompt: playgroundPrompt,
+        toolId: selectedPlaygroundTool.id
+      };
+    } else if (cat.includes('image') || cat.includes('art')) {
+      body = {
+        prompt: playgroundPrompt,
+        aspectRatio: playgroundAspectRatio,
+        toolId: selectedPlaygroundTool.id
+      };
+    } else if (cat.includes('video') || cat.includes('clip')) {
+      body = {
+        script: playgroundPrompt,
+        toolId: selectedPlaygroundTool.id
+      };
+    } else if (cat.includes('voice') || cat.includes('speech')) {
+      body = {
+        text: playgroundPrompt,
+        voiceName: playgroundVoiceName,
+        toolId: selectedPlaygroundTool.id
+      };
+    }
+
+    setPlaygroundJson(JSON.stringify(body, null, 2));
+    setJsonError('');
+  }, [selectedPlaygroundTool, playgroundPrompt, playgroundAspectRatio, playgroundVoiceName]);
+
+  const handleRawJsonChange = (val: string) => {
+    setPlaygroundJson(val);
+    try {
+      const parsed = JSON.parse(val);
+      setJsonError('');
+      // Sync back to interactive fields if applicable to avoid disjointed states
+      if (parsed.message) setPlaygroundPrompt(parsed.message);
+      else if (parsed.prompt) setPlaygroundPrompt(parsed.prompt);
+      else if (parsed.script) setPlaygroundPrompt(parsed.script);
+      else if (parsed.text) setPlaygroundPrompt(parsed.text);
+
+      if (parsed.aspectRatio) setPlaygroundAspectRatio(parsed.aspectRatio);
+      if (parsed.voiceName) setPlaygroundVoiceName(parsed.voiceName);
+    } catch (e: any) {
+      setJsonError(`Malformed JSON payload: ${e.message}`);
+    }
+  };
+
+  const executePlaygroundRequest = async () => {
+    if (jsonError || !token) return;
+    setPlaygroundLoading(true);
+    setPlaygroundResponse(null);
+    setPlaygroundResponseStatus('');
+    setPlaygroundResponseTime(null);
+    setError('');
+
+    const startTime = performance.now();
+    try {
+      const parsedBody = JSON.parse(playgroundJson);
+      const res = await fetch(playgroundEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(parsedBody)
+      });
+
+      const endTime = performance.now();
+      setPlaygroundResponseTime(Math.round(endTime - startTime));
+      
+      const statusText = `${res.status} ${res.statusText || (res.ok ? 'OK' : 'Error')}`;
+      setPlaygroundResponseStatus(statusText);
+
+      const data = await res.json();
+      setPlaygroundResponse(data);
+      
+      // Refresh credit metrics
+      onRefreshUser();
+    } catch (err: any) {
+      console.error(err);
+      setPlaygroundResponseStatus('500 Internal Server Error');
+      setPlaygroundResponse({ error: 'Failed to complete API request. Connection timed out or server refused.' });
+    } finally {
+      setPlaygroundLoading(false);
+    }
+  };
 
   // Scroll chatbot to bottom when message arrives
   useEffect(() => {
@@ -467,10 +638,47 @@ export default function Workspace({
         )}
 
         {/* THE MAIN WORKSPACE SWITCHER */}
-        <div className="rounded-2xl border border-slate-900 bg-slate-950 p-6 sm:p-8">
+        <div className="rounded-2xl border border-slate-900 bg-slate-950 p-6 sm:p-8 space-y-6">
           
-          {/* A. WORKSPACE: AI WRITER */}
-          {toolType === 'writer' && (
+          {/* Sub-tab navigation bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-900 pb-5">
+            <div className="flex gap-2.5">
+              <button
+                id="workspace-tab-console"
+                onClick={() => setWorkspaceSubTab('interface')}
+                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition ${
+                  workspaceSubTab === 'interface'
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/15'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900 bg-slate-900/30'
+                }`}
+              >
+                <Sparkles className="h-4 w-4" />
+                Interactive Console
+              </button>
+              <button
+                id="workspace-tab-playground"
+                onClick={() => setWorkspaceSubTab('playground')}
+                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition ${
+                  workspaceSubTab === 'playground'
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/15'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900 bg-slate-900/30'
+                }`}
+              >
+                <Terminal className="h-4 w-4" />
+                API Playground
+              </button>
+            </div>
+            
+            <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500 uppercase">
+              <Code className="h-3.5 w-3.5 text-indigo-400" />
+              <span>Real-time sandboxed execution</span>
+            </div>
+          </div>
+
+          {workspaceSubTab === 'interface' && (
+            <>
+              {/* A. WORKSPACE: AI WRITER */}
+              {toolType === 'writer' && (
             <div className="space-y-6">
               <div className="border-b border-slate-900 pb-4 flex justify-between items-center">
                 <div className="flex items-center gap-2">
@@ -977,6 +1185,395 @@ export default function Workspace({
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+            </>
+          )}
+
+          {/* API Playground View */}
+          {workspaceSubTab === 'playground' && (
+            <div className="space-y-8 animate-slide-up">
+              
+              {/* Introduction header */}
+              <div className="space-y-1">
+                <h2 className="text-sm font-black text-slate-100 flex items-center gap-2">
+                  <Terminal className="h-5 w-5 text-indigo-400" />
+                  REST API Playground
+                </h2>
+                <p className="text-xs text-slate-400 max-w-2xl leading-normal">
+                  Simulate and test real server-side REST API calls to your subscribed AI tools. Tweak payload structures, customize parameter inputs, and inspect instant formatted JSON response payloads.
+                </p>
+              </div>
+
+              {/* Playground body: Two columns */}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                
+                {/* COLUMN 1: Request builder */}
+                <div className="space-y-6">
+                  
+                  {/* Tool selection */}
+                  <div className="rounded-xl border border-slate-900 bg-slate-900/20 p-5 space-y-4">
+                    <h3 className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                      <Lock className="h-3.5 w-3.5 text-indigo-400" />
+                      1. Subscribed Tool Target
+                    </h3>
+                    
+                    <div className="space-y-3">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Select Subscription Node</label>
+                      <select
+                        id="playground-tool-selector"
+                        value={playgroundToolId}
+                        onChange={(e) => {
+                          setPlaygroundToolId(e.target.value);
+                          setPlaygroundResponse(null);
+                        }}
+                        className="w-full rounded-xl border border-slate-880 bg-slate-950 px-4 py-3 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition"
+                      >
+                        {playgroundSubscribedTools.length === 0 ? (
+                          <option value="">No Active Subscriptions Found</option>
+                        ) : (
+                          playgroundSubscribedTools.map(t => (
+                            <option key={t.id} value={t.id}>
+                              {t.title} ({t.category})
+                            </option>
+                          ))
+                        )}
+                      </select>
+                      
+                      {playgroundSubscribedTools.length === 0 && (
+                        <div className="rounded-lg border border-amber-500/10 bg-amber-500/5 p-3 text-[11px] text-amber-400">
+                          To run raw API queries on premium tools, purchase or unlock them in the <button onClick={() => setActiveTab('tools')} className="underline font-bold hover:text-amber-300">Catalog</button> first.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Request Endpoint & Headers */}
+                  <div className="rounded-xl border border-slate-900 bg-slate-900/20 p-5 space-y-4">
+                    <h3 className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                      <Code className="h-3.5 w-3.5 text-indigo-400" />
+                      2. Endpoint & HTTP Headers
+                    </h3>
+                    
+                    <div className="space-y-3.5 font-mono">
+                      {/* Endpoint Method + Path */}
+                      <div className="flex items-center gap-2 rounded-xl border border-slate-850 bg-slate-950 p-3 text-xs overflow-x-auto">
+                        <span className="rounded bg-emerald-500/15 border border-emerald-500/20 px-2 py-0.5 text-[9px] uppercase font-extrabold text-emerald-400 shrink-0">POST</span>
+                        <span className="text-slate-300 font-bold tracking-tight select-all">{playgroundEndpoint}</span>
+                      </div>
+
+                      {/* Header details */}
+                      <div className="rounded-xl border border-slate-850 bg-slate-950 p-4 space-y-2.5 text-[11px] text-slate-400">
+                        <div className="flex justify-between items-center pb-2 border-b border-slate-900">
+                          <span className="font-bold uppercase text-[9px] text-slate-500">Headers Map</span>
+                          <span className="text-[9px] text-slate-600">application/json</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span>Content-Type:</span>
+                          <span className="text-slate-300">application/json</span>
+                        </div>
+                        <div className="flex justify-between items-center gap-4">
+                          <span>Authorization:</span>
+                          <div className="flex items-center gap-1.5 shrink-1 overflow-hidden">
+                            <span className="text-slate-300 font-bold truncate max-w-[160px] sm:max-w-xs">
+                              {showPlaygroundToken ? `Bearer ${token}` : 'Bearer pd_sk_••••••••••••••••••••'}
+                            </span>
+                            <button
+                              id="playground-toggle-token-visibility"
+                              onClick={() => setShowPlaygroundToken(!showPlaygroundToken)}
+                              className="text-slate-500 hover:text-white p-1 rounded transition shrink-0"
+                              title={showPlaygroundToken ? "Hide Access Token" : "Reveal Access Token"}
+                            >
+                              {showPlaygroundToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                            </button>
+                            <button
+                              id="playground-copy-token"
+                              onClick={() => {
+                                navigator.clipboard.writeText(token || '');
+                                setCopiedToken(true);
+                                setTimeout(() => setCopiedToken(false), 2000);
+                              }}
+                              className="text-slate-500 hover:text-white p-1 rounded transition shrink-0"
+                              title="Copy Access Token to clipboard"
+                            >
+                              {copiedToken ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Parameter Fields & Payload Editor */}
+                  <div className="rounded-xl border border-slate-900 bg-slate-900/20 p-5 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <Sliders className="h-3.5 w-3.5 text-indigo-400" />
+                        3. Payload Configurator
+                      </h3>
+                      <span className="text-[8px] font-mono rounded bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 text-indigo-400 uppercase tracking-widest font-black">Interactive Sync</span>
+                    </div>
+
+                    {selectedPlaygroundTool ? (
+                      <div className="space-y-4">
+                        {/* Interactive Form Fields based on Tool Category */}
+                        <div className="space-y-3 bg-slate-950 p-4 rounded-xl border border-slate-850">
+                          <span className="block text-[8px] font-mono text-slate-500 uppercase tracking-wider mb-1">Visual Input Fields</span>
+                          
+                          {/* Text prompt / script / message config */}
+                          <div className="space-y-1.5">
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                              {selectedPlaygroundTool.category.toLowerCase().includes('chat') ? 'Message Parameter' :
+                               selectedPlaygroundTool.category.toLowerCase().includes('writing') ? 'Prompt Parameter' :
+                               selectedPlaygroundTool.category.toLowerCase().includes('image') ? 'Prompt Parameter' :
+                               selectedPlaygroundTool.category.toLowerCase().includes('video') ? 'Script Screenplay Parameter' :
+                               'Text Transcript Parameter'}
+                            </label>
+                            <textarea
+                              id="playground-prompt-input"
+                              value={playgroundPrompt}
+                              onChange={(e) => setPlaygroundPrompt(e.target.value)}
+                              rows={3}
+                              className="w-full rounded-lg border border-slate-800 bg-slate-900/60 p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition"
+                              placeholder="Enter parameter text value..."
+                            />
+                          </div>
+
+                          {/* Category specific controls */}
+                          {selectedPlaygroundTool.category.toLowerCase().includes('image') && (
+                            <div className="space-y-1.5">
+                              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Aspect Ratio Parameter</label>
+                              <select
+                                id="playground-aspect-ratio-selector"
+                                value={playgroundAspectRatio}
+                                onChange={(e) => setPlaygroundAspectRatio(e.target.value)}
+                                className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+                              >
+                                <option value="1:1">1:1 Square</option>
+                                <option value="16:9">16:9 Cinematic Landscape</option>
+                                <option value="9:16">9:16 Mobile Vertical</option>
+                                <option value="3:4">3:4 Standard Portrait</option>
+                              </select>
+                            </div>
+                          )}
+
+                          {selectedPlaygroundTool.category.toLowerCase().includes('voice') && (
+                            <div className="space-y-1.5">
+                              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Voice Name Parameter</label>
+                              <select
+                                id="playground-voice-selector"
+                                value={playgroundVoiceName}
+                                onChange={(e) => setPlaygroundVoiceName(e.target.value)}
+                                className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+                              >
+                                <option value="Zephyr">Zephyr (Male, Warm)</option>
+                                <option value="Kore">Kore (Female, Conversational)</option>
+                                <option value="Zeus">Zeus (Male, Deep)</option>
+                                <option value="Hera">Hera (Female, Editorial)</option>
+                              </select>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Raw JSON Code area */}
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Raw Request JSON Body</label>
+                          <div className="relative">
+                            <textarea
+                              id="playground-raw-json-editor"
+                              value={playgroundJson}
+                              onChange={(e) => handleRawJsonChange(e.target.value)}
+                              rows={8}
+                              className={`w-full rounded-xl border p-4 text-xs font-mono bg-slate-950 transition select-all leading-relaxed ${
+                                jsonError ? 'border-rose-500 text-rose-300 focus:border-rose-500 focus:ring-0' : 'border-slate-850 text-indigo-400 focus:border-indigo-500'
+                              }`}
+                            />
+                            
+                            {jsonError && (
+                              <div className="absolute bottom-3 left-3 right-3 rounded bg-rose-500/10 border border-rose-500/20 px-3 py-1.5 text-[10px] font-mono text-rose-400 flex items-center gap-1.5 animate-slide-up">
+                                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">{jsonError}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Execution Cost Warning */}
+                        <div className="flex justify-between items-center text-[10px] font-mono text-slate-500 py-1">
+                          <span>RESOURCE COST:</span>
+                          <span className="font-extrabold text-indigo-400">
+                            {selectedPlaygroundTool.category.toLowerCase().includes('writer') ? '50 CREDITS' : 
+                             selectedPlaygroundTool.category.toLowerCase().includes('chat') ? '10 CREDITS' : 
+                             selectedPlaygroundTool.category.toLowerCase().includes('image') ? '150 CREDITS' : 
+                             selectedPlaygroundTool.category.toLowerCase().includes('video') ? '300 CREDITS' : 
+                             '100 CREDITS'}
+                          </span>
+                        </div>
+
+                        {/* Send request button */}
+                        <button
+                          id="playground-send-request-btn"
+                          onClick={executePlaygroundRequest}
+                          disabled={playgroundLoading || !!jsonError || playgroundSubscribedTools.length === 0}
+                          className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-extrabold py-3.5 text-xs transition shadow-lg shadow-indigo-600/20"
+                        >
+                          {playgroundLoading ? (
+                            <>
+                              <RefreshCw className="h-4.5 w-4.5 animate-spin" />
+                              <span>Dispatching REST request payload...</span>
+                            </>
+                          ) : (
+                            <>
+                              <SendHorizontal className="h-4.5 w-4.5" />
+                              <span>Execute API Request (POST)</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500 italic">Select a subscription tool above to customize payloads.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* COLUMN 2: Response inspector */}
+                <div className="space-y-6 flex flex-col h-full">
+                  
+                  {/* Status & Latency summary panel */}
+                  <div className="rounded-xl border border-slate-900 bg-slate-900/20 p-5 space-y-4 flex-1 flex flex-col min-h-[400px]">
+                    <div className="flex justify-between items-center border-b border-slate-900 pb-3 shrink-0">
+                      <h3 className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <Terminal className="h-3.5 w-3.5 text-indigo-400 animate-pulse" />
+                        4. Real-time Response Output
+                      </h3>
+                      
+                      {playgroundResponse && (
+                        <button
+                          id="playground-copy-response"
+                          onClick={() => {
+                            navigator.clipboard.writeText(JSON.stringify(playgroundResponse, null, 2));
+                            setCopiedResponse(true);
+                            setTimeout(() => setCopiedResponse(false), 2000);
+                          }}
+                          className="flex items-center gap-1 text-[10px] font-bold text-indigo-400 hover:text-indigo-300 transition"
+                        >
+                          {copiedResponse ? (
+                            <>
+                              <Check className="h-3.5 w-3.5 text-emerald-400" />
+                              <span>Copied Body!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-3.5 w-3.5" />
+                              <span>Copy JSON</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Execution Metrics / Status Code */}
+                    {playgroundResponseStatus ? (
+                      <div className="grid grid-cols-3 gap-2 shrink-0">
+                        <div className="rounded-lg bg-slate-950 border border-slate-850 p-2.5 text-center">
+                          <span className="block text-[8px] font-mono text-slate-500 uppercase">HTTP Status</span>
+                          <span className={`text-[11px] font-bold ${playgroundResponseStatus.startsWith('2') ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {playgroundResponseStatus}
+                          </span>
+                        </div>
+                        <div className="rounded-lg bg-slate-950 border border-slate-850 p-2.5 text-center">
+                          <span className="block text-[8px] font-mono text-slate-500 uppercase">Latency</span>
+                          <span className="text-[11px] font-bold text-indigo-400 font-mono">
+                            {playgroundResponseTime ? `${playgroundResponseTime} ms` : 'N/A'}
+                          </span>
+                        </div>
+                        <div className="rounded-lg bg-slate-950 border border-slate-850 p-2.5 text-center">
+                          <span className="block text-[8px] font-mono text-slate-500 uppercase">Content-Type</span>
+                          <span className="text-[10px] font-bold text-slate-300 font-mono">application/json</span>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {/* JSON Display Area */}
+                    <div className="flex-1 min-h-[250px] relative rounded-xl border border-slate-850 bg-slate-950 p-4 font-mono text-xs text-slate-300 overflow-y-auto max-h-[500px]">
+                      {playgroundLoading ? (
+                        <div className="absolute inset-0 flex flex-col justify-center items-center gap-3 bg-slate-950/80 backdrop-blur-xs">
+                          <RefreshCw className="h-8 w-8 text-indigo-500 animate-spin" />
+                          <p className="text-[10px] uppercase font-bold text-slate-500 font-mono">Awaiting response body stream...</p>
+                        </div>
+                      ) : playgroundResponse ? (
+                        <pre className="text-slate-300 whitespace-pre-wrap leading-relaxed select-all">
+                          {JSON.stringify(playgroundResponse, null, 2)}
+                        </pre>
+                      ) : (
+                        <div className="h-full flex flex-col justify-center items-center text-center p-6 space-y-2.5">
+                          <div className="h-10 w-10 rounded-xl bg-slate-900 border border-slate-850 flex items-center justify-center text-slate-500">
+                            <Terminal className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-slate-400">Response Buffer Empty</p>
+                            <p className="text-[10px] text-slate-600 max-w-xs leading-normal mt-1">
+                              Configure inputs and trigger the execute action to inspect incoming JSON packages in real-time.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Extra Visual Result Preview Panel inside Playground */}
+                    {!playgroundLoading && playgroundResponse && (
+                      <div className="mt-4 pt-4 border-t border-slate-900 shrink-0 space-y-2 animate-slide-up">
+                        <span className="block text-[8px] font-mono text-slate-500 uppercase tracking-wider">Compiled Output Preview</span>
+                        
+                        {/* If image url is returned, show generated thumbnail */}
+                        {playgroundResponse.imageUrl && (
+                          <div className="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-850">
+                            <div className="h-14 w-14 rounded-lg overflow-hidden bg-slate-900 shrink-0 border border-slate-800">
+                              <img src={playgroundResponse.imageUrl} alt="API output" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                            </div>
+                            <div>
+                              <span className="block text-[10px] font-bold text-emerald-400">Synthesized Art Grid File</span>
+                              <span className="block text-[9px] text-slate-500 font-mono mt-0.5 max-w-[200px] truncate">{playgroundResponse.imageUrl}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* If video url is returned, show simple playable container */}
+                        {playgroundResponse.videoUrl && (
+                          <div className="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-850">
+                            <div className="h-14 w-14 rounded-lg overflow-hidden bg-slate-900 shrink-0 border border-slate-800 flex items-center justify-center">
+                              <Video className="h-6 w-6 text-indigo-400 animate-pulse" />
+                            </div>
+                            <div>
+                              <span className="block text-[10px] font-bold text-emerald-400">Compiled Video Container</span>
+                              <span className="block text-[9px] text-slate-500 font-mono mt-0.5 max-w-[200px] truncate">{playgroundResponse.videoUrl}</span>
+                              <a href={playgroundResponse.videoUrl} target="_blank" rel="noopener noreferrer" className="inline-block text-[9px] text-indigo-400 underline font-bold mt-1">Play Video</a>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* If voice tts audio is returned (base64) */}
+                        {playgroundResponse.audioBase64 && (
+                          <div className="flex items-center gap-3 bg-slate-950 p-3 rounded-xl border border-slate-850">
+                            <button
+                              onClick={() => playAudioFromBase64(playgroundResponse.audioBase64)}
+                              className="h-12 w-12 rounded-xl bg-indigo-600 hover:bg-indigo-500 flex items-center justify-center text-white shrink-0 shadow-lg shadow-indigo-600/15"
+                            >
+                              <Volume2 className="h-5 w-5" />
+                            </button>
+                            <div>
+                              <span className="block text-[10px] font-bold text-emerald-400">Synthesized Speech Stream</span>
+                              <span className="block text-[9px] text-slate-500 mt-0.5">Click Speaker icon to play Base64 response</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                  </div>
+                </div>
+
               </div>
             </div>
           )}

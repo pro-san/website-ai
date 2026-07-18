@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Sparkles, Wallet, Shield, Layers, HelpCircle, 
   MessageSquare, Terminal, User as UserIcon, RefreshCw 
 } from 'lucide-react';
-import { User, AITool, Category, Notification, ChatMessage } from './types';
+import { User, AITool, Category, Notification, ChatMessage, Order } from './types';
 
 // Page Imports
 import Home from './pages/Home';
@@ -44,10 +44,38 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'tools' | 'detail' | 'workspace' | 'dashboard' | 'creator' | 'admin' | 'login'>('home');
   const [selectedToolSlug, setSelectedToolSlug] = useState<string>('');
   const [activeTool, setActiveTool] = useState<AITool | null>(null);
+  const [userOrders, setUserOrders] = useState<Order[]>([]);
 
   // Layout Drawers
   const [showNotificationsDrawer, setShowNotificationsDrawer] = useState(false);
   const [toast, setToast] = useState<{ title: string; message: string; visible: boolean; type?: 'info' | 'success' | 'error' } | null>(null);
+
+  // Theme State (Dark Theme / High-contrast Light Theme)
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    try {
+      const saved = localStorage.getItem('theme');
+      return (saved === 'light' || saved === 'dark') ? saved : 'dark';
+    } catch {
+      return 'dark';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (theme === 'light') {
+        document.documentElement.classList.add('theme-light');
+      } else {
+        document.documentElement.classList.remove('theme-light');
+      }
+      localStorage.setItem('theme', theme);
+    } catch (e) {
+      console.error('Failed accessing local storage for theme:', e);
+    }
+  }, [theme]);
+
+  const handleToggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
 
   // WebSocket Ref
   const wsRef = useRef<WebSocket | null>(null);
@@ -125,11 +153,19 @@ export default function App() {
   // Load notifications and orders for user
   const loadUserData = async (authToken: string) => {
     try {
-      const res = await fetch('/api/notifications', {
-        headers: { 'Authorization': `Bearer ${authToken}` }
-      });
-      if (res.ok) {
-        setNotifications(await res.json());
+      const [notifRes, orderRes] = await Promise.all([
+        fetch('/api/notifications', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        }),
+        fetch('/api/orders', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        })
+      ]);
+      if (notifRes.ok) {
+        setNotifications(await notifRes.json());
+      }
+      if (orderRes.ok) {
+        setUserOrders(await orderRes.json());
       }
     } catch (e) {
       console.error('Failed loading specific user states:', e);
@@ -291,6 +327,7 @@ export default function App() {
         triggerToast('Subscribed Successfully', `Full access to ${tool.title} unlocked! 1000 bonus credits credited.`, 'success');
         handleRefreshUser();
         handleRefreshTools();
+        if (token) loadUserData(token);
         handleUseNow(tool);
       } else {
         const err = await res.json();
@@ -334,14 +371,17 @@ export default function App() {
   };
 
   // Determine purchased list
-  const purchasedToolIds = user 
-    ? tools.filter(t => t.type === 'free').map(t => t.id) // all free ones
-    : [];
+  const purchasedToolIds = useMemo(() => {
+    if (!user) return [];
+    const freeTools = tools.filter(t => t.type === 'free').map(t => t.id);
+    const orderedTools = userOrders.map(o => o.toolId);
+    return Array.from(new Set([...freeTools, ...orderedTools]));
+  }, [tools, userOrders, user]);
 
   const approvedTools = tools.filter(t => t.status === 'approved');
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className={`min-h-screen flex flex-col font-sans ${theme === 'light' ? 'theme-light bg-white text-slate-900' : 'bg-slate-950 text-slate-100'}`}>
       
       {/* 1. GLOBAL NAVBAR HEADER */}
       <Navbar 
@@ -354,6 +394,8 @@ export default function App() {
         }}
         onLogout={handleLogout}
         onOpenNotifications={() => setShowNotificationsDrawer(true)}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
       />
 
       {/* 2. THE MAIN ROUTING PAGE SPACE */}
@@ -419,6 +461,7 @@ export default function App() {
                 onRefreshUser={handleRefreshUser}
                 setActiveTab={setActiveTab}
                 setActiveTool={setActiveTool}
+                purchasedToolIds={purchasedToolIds}
               />
             )}
 
